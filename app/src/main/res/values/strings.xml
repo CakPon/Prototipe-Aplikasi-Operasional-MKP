@@ -1,0 +1,15 @@
+<resources>
+    <string name="app_name">Data Operasional</string>
+    <string name="hello_blank_fragment">Hello blank fragment</string>
+    <string name="tablayout">tabLayout</string>
+    <string name="helm">Helm</string>
+    <string name="permission_denied">Izin ditolak</string>
+
+    <string name="error_name_required">Nama tidak boleh kosong</string>
+    <string name="error_unit_required">Unit tidak boleh kosong</string>
+    <string name="error_found_required">Jenis temuan tidak boleh kosong</string>
+    <string name="error_desc_required">Deskripsi tidak boleh kosong</string>
+    <string name="error_photo_required">Harap upload foto</string>
+
+
+</resources>

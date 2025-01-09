@@ -1,0 +1,693 @@
+function doGet(e) {
+  if (e.parameter && e.parameter.action) {
+    var action = e.parameter.action;
+    switch (action) {
+      case "getData":
+        return getMergedData();
+      default:
+        return ContentService.createTextOutput("Invalid action.")
+                             .setMimeType(ContentService.MimeType.TEXT);
+    }
+  } else {
+    return ContentService.createTextOutput("No action parameter provided.");
+  }
+}
+
+function doPost(e) {
+  if (!e || !e.postData || !e.postData.contents) {
+    return ContentService.createTextOutput("Invalid request.");
+  }
+  var data = JSON.parse(e.postData.contents);
+  
+  if (data && data.action) {
+    var action = data.action; 
+    switch (action) {
+      case "restockClothesWearPack":
+        return postRestockClothesWearPack(data); 
+      case "restockPantsWearPack":
+        return postRestockPantsWearPack(data); 
+      case "restockThreeRowData":
+        return postRestockThreeRowData(data); 
+      case "restockOneRowData":
+        return postRestockOneRow(data);  
+        case "decreaseClothesWearPack":
+        return postDecreaseClothesWearPack(data); 
+      case "decreasePantsWearPack":
+        return postDecreasePantsWearPack(data); 
+      case "decreaseThreeRowData":
+        return postDecreaseThreeRowData(data); 
+      case "decreaseOneRowData":
+        return postDecreaseOneRow(data); 
+      case "postForm":
+        return postForm(data); 
+      default:
+        return ContentService.createTextOutput("Invalid action.")
+                             .setMimeType(ContentService.MimeType.TEXT);
+    }
+  } else {
+    return ContentService.createTextOutput("No action provided in request body.");
+  }
+}
+
+
+function getSheet() {
+  var sheetId = "YOUR SHEET ID";
+  var sheetName = "YOUR SHEET NAME";
+  return SpreadsheetApp.openById(sheetId).getSheetByName(sheetName);
+}
+
+function uploadImageToDrive(imageBase64, fileName) {
+  var folderId = "YOUR FOLDER ID"; 
+  var folder = DriveApp.getFolderById(folderId);
+
+  var blob = Utilities.newBlob(Utilities.base64Decode(imageBase64), "image/jpeg", fileName);
+  var file = folder.createFile(blob);
+
+  return file.getUrl(); 
+}
+
+
+function postForm(data) {
+  var nama = data.nama;
+  var user = data.user;
+  var unit = data.unit;
+  var jenisPekerjaan = data.jenisPekerjaan;
+  var jenisTemuan = data.jenisTemuan;
+  var deskripsi = data.deskripsi;
+  var imageBase64 = data.image; 
+  var location = data.location;
+
+  var imageUrl = "No Image";
+  if (imageBase64) {
+    imageUrl = uploadImageToDrive(imageBase64, `Image_${new Date().getTime()}.jpg`);
+  }
+
+  var sheet = SpreadsheetApp.openById("YOUR SHEET ID").getSheetByName("YOUR SHEET NAME");
+  sheet.appendRow([nama, user, unit, jenisPekerjaan, jenisTemuan, deskripsi, imageUrl, location, new Date()]);
+
+  return ContentService.createTextOutput(
+    JSON.stringify({ "status": "success", "message": "Data successfully posted" })
+  ).setMimeType(ContentService.MimeType.JSON);
+}
+
+function getMergedData() {
+  var sheet = getSheet();
+  var categoriesBaju = sheet.getRange(2, 2, 112, 1).getValues();
+  var sizesBaju = sheet.getRange(2, 3, 112, 1).getValues();
+  var stockBaju = sheet.getRange(2, 4, 112, 1).getValues();
+
+  var bajuData = {};
+  var currentColorBaju = ""; 
+
+  for (var i = 0; i < categoriesBaju.length; i++) {
+    var color = categoriesBaju[i][0]?.trim();
+    var size = sizesBaju[i][0];
+    var stockValue = stockBaju[i][0];
+
+    // Set stockValue to 0 if null or empty
+    stockValue = (stockValue === null || stockValue === "") ? 0 : parseInt(stockValue);
+
+    if (color) {
+      currentColorBaju = color;
+    }
+
+    if (!currentColorBaju || !size) {
+      continue;
+    }
+
+    if (!bajuData[currentColorBaju]) {
+      bajuData[currentColorBaju] = {
+        color: currentColorBaju,
+        items: []
+      };
+    }
+
+    bajuData[currentColorBaju].items.push({
+      size: size,
+      stock: stockValue
+    });
+  }
+
+  var finalBajuData = Object.values(bajuData);
+
+  // Celana Wear Pack Data
+  var categoriesCelana = sheet.getRange(2, 9, 145, 1).getValues();
+  var sizesCelana = sheet.getRange(2, 10, 145, 1).getValues();
+  var stockCelana = sheet.getRange(2, 11, 145, 1).getValues();
+
+  var celanaData = {};
+  var currentColorCelana = ""; 
+
+  for (var i = 0; i < categoriesCelana.length; i++) {
+    var color = categoriesCelana[i][0]?.trim();
+    var size = sizesCelana[i][0];
+    var stockValue = stockCelana[i][0];
+
+    // Set stockValue to 0 if null or empty
+    stockValue = (stockValue === null || stockValue === "") ? 0 : parseInt(stockValue);
+
+    if (color) {
+      currentColorCelana = color;
+    }
+
+    if (!currentColorCelana || !size) {
+      continue;
+    }
+
+    if (!celanaData[currentColorCelana]) {
+      celanaData[currentColorCelana] = {
+        color: currentColorCelana,
+        items: []
+      };
+    }
+
+    celanaData[currentColorCelana].items.push({
+      size: size,
+      stock: stockValue
+    });
+  }
+
+  var finalCelanaData = Object.values(celanaData);
+
+  // Data with Three Rows (Helm dan Sepatu)
+  var categoriesThreeRow = sheet.getRange(2, 15, 39, 1).getValues();  
+  var sizesThreeRow = sheet.getRange(2, 16, 39, 1).getValues();      
+  var stockThreeRow = sheet.getRange(2, 17, 39, 1).getValues();     
+
+  var threeRowData = {};
+  var currentColorThreeRow = ""; 
+  for (var i = 0; i < categoriesThreeRow.length; i++) {
+    var color = categoriesThreeRow[i][0]?.trim();
+    var size = sizesThreeRow[i][0];
+    var stockValue = stockThreeRow[i][0];
+
+    // Set stockValue to 0 if null or empty
+    stockValue = (stockValue === null || stockValue === "") ? 0 : parseInt(stockValue);
+ 
+    if (color) {
+      currentColorThreeRow = color;
+    }
+
+    if (!currentColorThreeRow || !size) {
+      continue;
+    }
+
+    if (!threeRowData[currentColorThreeRow]) {
+      threeRowData[currentColorThreeRow] = {
+        color: currentColorThreeRow,
+        items: []
+      };
+    }
+
+    threeRowData[currentColorThreeRow].items.push({
+      size: size,
+      stock: stockValue
+    });
+  }
+  var finalThreeRowData = Object.values(threeRowData);
+
+    // Data with One Row (Perlengkapan Lainnya)
+  var categoriesOneRow = sheet.getRange(2, 19, 11, 1).getValues();    
+  var stockOneRow = sheet.getRange(2, 20, 11, 1).getValues();     
+
+  var oneRowData = {};
+  for (var i = 0; i < categoriesOneRow.length; i++) {
+    var color = categoriesOneRow[i][0]?.trim();
+    var stockValue = stockOneRow[i][0];
+
+    // Set stockValue to 0 if null or empty, but ensure we skip empty rows
+    if (!color || color === "" ) {
+      continue; // Skip if color or stock is empty
+    }
+
+    stockValue = (stockValue === null || stockValue === "") ? 0 : parseInt(stockValue);
+
+    if (!oneRowData[color]) {
+      oneRowData[color] = {
+        color: color,
+        items: []
+      };
+    }
+
+    oneRowData[color].items.push({
+      size: color, // In this case, 'size' is not relevant so we assign the color
+      stock: stockValue
+    });
+  }
+
+  var finalOneRowData = Object.values(oneRowData);
+
+
+  // Merge all data into one JSON
+  var responseObject = {
+    categories: [
+      {
+        category: "Baju Wear Pack",
+        items: finalBajuData
+      },
+      {
+        category: "Celana Wear Pack",
+        items: finalCelanaData
+      },
+      {
+        category: "Helm dan Sepatu",
+        items: finalThreeRowData
+      },
+      {
+        category: "Perlengkapan Lainnya",
+        items: finalOneRowData
+      }
+    ]
+  };
+
+  var jsonData = JSON.stringify(responseObject);
+  console.log("Final JSON Output: ", jsonData);
+
+  return ContentService
+    .createTextOutput(jsonData)
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function postRestockClothesWearPack(data) {
+  const category = data.category;  
+  const targetStrings = data.targetStrings;  
+  const newStockArray = data.newStockArray; 
+
+  const sheet = getSheet();
+  const categoryRange = sheet.getRange(2, 2, 113, 1).getValues();
+
+  let foundCategory = false;
+  let categoryRow = -1;
+
+  // Find the row of the given category
+  for (let i = 0; i < categoryRange.length; i++) {
+    const currentCategory = categoryRange[i][0].trim();
+    if (currentCategory === category) {
+      categoryRow = i + 2; 
+      foundCategory = true;
+      break; 
+    }
+  }
+
+  if (foundCategory && categoryRow !== -1) {
+    const valueRange = sheet.getRange(categoryRow, 3, 8, 1).getValues();
+    const stockRange = sheet.getRange(categoryRow, 4, 8, 1).getValues();
+    const stockWriteRange = sheet.getRange(categoryRow, 4, 8, 1);
+
+    targetStrings.forEach(function(targetString, index) {
+      for (let i = 0; i < valueRange.length; i++) {
+        const cellValue = valueRange[i][0];
+
+        // Check if the current cell matches the target string
+        if (String(cellValue) === targetString) {
+          const existingStock = stockRange[i][0] || 0;  
+          const newStock = newStockArray[index] || 0; // Fallback to 0 if undefined
+          const updatedStock = existingStock + newStock;
+          stockWriteRange.getCell(i + 1, 1).setValue(updatedStock);
+        }
+      }
+    });
+
+    return ContentService.createTextOutput(JSON.stringify({
+      status: "success",
+      message: "Stock updated successfully for all matching targets."
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+
+  return ContentService.createTextOutput(JSON.stringify({
+    status: "error",
+    message: "Category or Target not found."
+  })).setMimeType(ContentService.MimeType.JSON);
+}
+
+
+function postRestockPantsWearPack(data) {
+  var category = data.category;  
+  var targetStrings = data.targetStrings;
+  var newStockArray = data.newStockArray;
+
+  var sheet = getSheet();
+  var categoryRange = sheet.getRange(2, 9, 145, 1).getValues(); 
+
+  var foundCategory = false;
+  var categoryRow = -1;
+
+  for (var i = 0; i < categoryRange.length; i++) {
+    var currentCategory = categoryRange[i][0].trim();
+    if (currentCategory === category) {
+      categoryRow = i + 2; 
+      foundCategory = true;
+      break; 
+    }
+  }
+  if (foundCategory && categoryRow !== -1) {
+    var rowsToCheck = Math.min(targetStrings.length, 145 - categoryRow + 1); 
+    
+    if (rowsToCheck > 0) {
+      var valueRange = sheet.getRange(categoryRow, 10, rowsToCheck, 1).getValues(); 
+      var stockRange = sheet.getRange(categoryRow, 11, rowsToCheck, 1).getValues(); 
+      var stockWriteRange = sheet.getRange(categoryRow, 11, rowsToCheck, 1);
+
+      // Loop through each target string
+      targetStrings.forEach(function(targetString, index) {
+        var targetFound = false; 
+
+        for (var i = 0; i < valueRange.length; i++) {
+          var cellValue = String(valueRange[i][0]).trim(); 
+
+          if (cellValue === targetString) {
+            targetFound = true; // Mark that the target was found
+            var existingStock = stockRange[i][0] || 0;  
+            var newStock = newStockArray[index] !== undefined ? newStockArray[index] : newStockArray[0];
+            var updatedStock = existingStock + newStock;
+            stockWriteRange.getCell(i + 1, 1).setValue(updatedStock);
+            break; // Break out of the loop once the target is found and updated
+          }
+        }
+
+        if (!targetFound) {
+          console.log("Target not found: ", targetString);
+        }
+      });
+
+      return ContentService.createTextOutput(JSON.stringify({
+        status: "success",
+        message: "Stock updated successfully for all matching targets."
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+  }
+
+  return ContentService.createTextOutput(JSON.stringify({
+    status: "error",
+    message: "Category or Target not found."
+  })).setMimeType(ContentService.MimeType.JSON);
+}
+
+function postRestockThreeRowData(data) {
+  var category = data.category;  
+  var targetStrings = data.targetStrings;
+  var newStockArray = data.newStockArray;
+
+  var sheet = getSheet();
+  var categoryRange = sheet.getRange(2, 15, 39, 1).getValues(); 
+
+  var foundCategory = false;
+  var categoryRow = -1;
+
+  for (var i = 0; i < categoryRange.length; i++) {
+    var currentCategory = categoryRange[i][0].trim();
+    if (currentCategory === category) {
+      categoryRow = i + 2; 
+      foundCategory = true;
+      break; 
+    }
+  }
+
+  if (foundCategory && categoryRow !== -1) {
+    var rowsToCheck = Math.min(targetStrings.length, 39 - (categoryRow - 1));
+
+    if (rowsToCheck > 0) {
+      var valueRange = sheet.getRange(categoryRow, 16, rowsToCheck, 1).getValues(); 
+      var stockRange = sheet.getRange(categoryRow, 17, rowsToCheck, 1).getValues(); 
+      var stockWriteRange = sheet.getRange(categoryRow, 17, rowsToCheck, 1);
+
+      var targetFound = false;
+
+      targetStrings.forEach(function(targetString, index) {
+        for (var i = 0; i < valueRange.length; i++) {
+          var cellValue = String(valueRange[i][0]).trim(); 
+
+          if (cellValue === targetString) {
+            targetFound = true; 
+            var existingStock = stockRange[i][0] || 0;  
+            var newStock = newStockArray[index] !== undefined ? newStockArray[index] : newStockArray[0];
+            var updatedStock = existingStock + newStock;
+
+            stockWriteRange.getCell(i + 1, 1).setValue(updatedStock); 
+            break; 
+          } 
+        }
+      });
+
+      if (targetFound) {
+        return ContentService.createTextOutput(JSON.stringify({
+          status: "success",
+          message: "Stock updated successfully for all matching targets."
+        })).setMimeType(ContentService.MimeType.JSON);
+      } else {
+        return ContentService.createTextOutput(JSON.stringify({
+          status: "error",
+          message: "No matching targets found."
+        })).setMimeType(ContentService.MimeType.JSON);
+      }
+    }
+  }
+
+  return ContentService.createTextOutput(JSON.stringify({
+    status: "error",
+    message: "Category or Target not found."
+  })).setMimeType(ContentService.MimeType.JSON);
+}
+
+function postRestockOneRow(data) {
+  var targetCategory = data.targetCategory;
+  var newStock = data.newStock;
+
+  var sheet = getSheet();
+  var valueRange = sheet.getRange(2, 19, 11, 1).getValues(); 
+  var stockRange = sheet.getRange(2, 20, 11, 1).getValues(); 
+  var stockWriteRange = sheet.getRange(2, 20, 11, 1); 
+
+  // Loop through each category value
+  for (var i = 0; i < valueRange.length; i++) {
+    var cellValue = valueRange[i][0];
+
+    // Check if the current cell matches the target category
+    if (String(cellValue).trim() === targetCategory.trim()) {
+      var existingStock = stockRange[i][0] || 0; 
+      var updatedStock = existingStock + newStock; 
+      stockWriteRange.getCell(i + 1, 1).setValue(updatedStock); 
+      return ContentService.createTextOutput(JSON.stringify({
+        status: "success",
+        message: "Stock updated successfully for target " + targetCategory + "!"
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+  }
+  return ContentService.createTextOutput(JSON.stringify({
+    status: "error",
+    message: "Target not found."
+  })).setMimeType(ContentService.MimeType.JSON);
+}
+
+
+function postDecreaseClothesWearPack(data) {
+  const category = data.category;  
+  const targetStrings = data.targetStrings;  
+  const newStockArray = data.newStockArray; 
+
+  const sheet = getSheet();
+  const categoryRange = sheet.getRange(2, 2, 113, 1).getValues();
+
+  let foundCategory = false;
+  let categoryRow = -1;
+
+  // Find the row of the given category
+  for (let i = 0; i < categoryRange.length; i++) {
+    const currentCategory = categoryRange[i][0].trim();
+    if (currentCategory === category) {
+      categoryRow = i + 2; 
+      foundCategory = true;
+      break; 
+    }
+  }
+
+  if (foundCategory && categoryRow !== -1) {
+    const valueRange = sheet.getRange(categoryRow, 3, 8, 1).getValues();
+    const stockRange = sheet.getRange(categoryRow, 4, 8, 1).getValues();
+    const stockWriteRange = sheet.getRange(categoryRow, 4, 8, 1);
+
+    targetStrings.forEach(function(targetString, index) {
+      for (let i = 0; i < valueRange.length; i++) {
+        const cellValue = valueRange[i][0];
+
+        // Check if the current cell matches the target string
+        if (String(cellValue) === targetString) {
+          const existingStock = stockRange[i][0] || 0;  
+          const newStock = newStockArray[index] || 0; // Fallback to 0 if undefined
+          const updatedStock = existingStock - newStock;
+          stockWriteRange.getCell(i + 1, 1).setValue(updatedStock);
+        }
+      }
+    });
+
+    return ContentService.createTextOutput(JSON.stringify({
+      status: "success",
+      message: "Stock updated successfully for all matching targets."
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+
+  return ContentService.createTextOutput(JSON.stringify({
+    status: "error",
+    message: "Category or Target not found."
+  })).setMimeType(ContentService.MimeType.JSON);
+}
+
+
+function postDecreasePantsWearPack(data) {
+  var category = data.category;  
+  var targetStrings = data.targetStrings;
+  var newStockArray = data.newStockArray;
+
+  var sheet = getSheet();
+  var categoryRange = sheet.getRange(2, 9, 145, 1).getValues(); 
+
+  var foundCategory = false;
+  var categoryRow = -1;
+
+  for (var i = 0; i < categoryRange.length; i++) {
+    var currentCategory = categoryRange[i][0].trim();
+    if (currentCategory === category) {
+      categoryRow = i + 2; 
+      foundCategory = true;
+      break; 
+    }
+  }
+  if (foundCategory && categoryRow !== -1) {
+    var rowsToCheck = Math.min(targetStrings.length, 145 - categoryRow + 1); 
+    
+    if (rowsToCheck > 0) {
+      var valueRange = sheet.getRange(categoryRow, 10, rowsToCheck, 1).getValues(); 
+      var stockRange = sheet.getRange(categoryRow, 11, rowsToCheck, 1).getValues(); 
+      var stockWriteRange = sheet.getRange(categoryRow, 11, rowsToCheck, 1);
+
+      // Loop through each target string
+      targetStrings.forEach(function(targetString, index) {
+        var targetFound = false; 
+
+        for (var i = 0; i < valueRange.length; i++) {
+          var cellValue = String(valueRange[i][0]).trim(); 
+
+          if (cellValue === targetString) {
+            targetFound = true; // Mark that the target was found
+            var existingStock = stockRange[i][0] || 0;  
+            var newStock = newStockArray[index] !== undefined ? newStockArray[index] : newStockArray[0];
+            var updatedStock = existingStock - newStock;
+            stockWriteRange.getCell(i + 1, 1).setValue(updatedStock);
+            break; // Break out of the loop once the target is found and updated
+          }
+        }
+
+        if (!targetFound) {
+          console.log("Target not found: ", targetString);
+        }
+      });
+
+      return ContentService.createTextOutput(JSON.stringify({
+        status: "success",
+        message: "Stock updated successfully for all matching targets."
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+  }
+
+  return ContentService.createTextOutput(JSON.stringify({
+    status: "error",
+    message: "Category or Target not found."
+  })).setMimeType(ContentService.MimeType.JSON);
+}
+
+function postDecreaseThreeRowData(data) {
+  var category = data.category;  
+  var targetStrings = data.targetStrings;
+  var newStockArray = data.newStockArray;
+
+  var sheet = getSheet();
+  var categoryRange = sheet.getRange(2, 15, 39, 1).getValues(); 
+
+  var foundCategory = false;
+  var categoryRow = -1;
+
+  for (var i = 0; i < categoryRange.length; i++) {
+    var currentCategory = categoryRange[i][0].trim();
+    if (currentCategory === category) {
+      categoryRow = i + 2; 
+      foundCategory = true;
+      break; 
+    }
+  }
+
+  if (foundCategory && categoryRow !== -1) {
+    var rowsToCheck = Math.min(targetStrings.length, 39 - (categoryRow - 1));
+
+    if (rowsToCheck > 0) {
+      var valueRange = sheet.getRange(categoryRow, 16, rowsToCheck, 1).getValues(); 
+      var stockRange = sheet.getRange(categoryRow, 17, rowsToCheck, 1).getValues(); 
+      var stockWriteRange = sheet.getRange(categoryRow, 17, rowsToCheck, 1);
+
+      var targetFound = false;
+
+      targetStrings.forEach(function(targetString, index) {
+        for (var i = 0; i < valueRange.length; i++) {
+          var cellValue = String(valueRange[i][0]).trim(); 
+
+          if (cellValue === targetString) {
+            targetFound = true; 
+            var existingStock = stockRange[i][0] || 0;  
+            var newStock = newStockArray[index] !== undefined ? newStockArray[index] : newStockArray[0];
+            var updatedStock = existingStock - newStock;
+
+            stockWriteRange.getCell(i + 1, 1).setValue(updatedStock); 
+            break; 
+          } 
+        }
+      });
+
+      if (targetFound) {
+        return ContentService.createTextOutput(JSON.stringify({
+          status: "success",
+          message: "Stock updated successfully for all matching targets."
+        })).setMimeType(ContentService.MimeType.JSON);
+      } else {
+        return ContentService.createTextOutput(JSON.stringify({
+          status: "error",
+          message: "No matching targets found."
+        })).setMimeType(ContentService.MimeType.JSON);
+      }
+    }
+  }
+
+  return ContentService.createTextOutput(JSON.stringify({
+    status: "error",
+    message: "Category or Target not found."
+  })).setMimeType(ContentService.MimeType.JSON);
+}
+
+
+function postDecreaseOneRow(data) {
+  var targetCategory = data.targetCategory;
+  var newStock = data.newStock;
+
+  var sheet = getSheet();
+  var valueRange = sheet.getRange(2, 19, 11, 1).getValues(); 
+  var stockRange = sheet.getRange(2, 20, 11, 1).getValues(); 
+  var stockWriteRange = sheet.getRange(2, 20, 11, 1); 
+
+  // Loop through each category value
+  for (var i = 0; i < valueRange.length; i++) {
+    var cellValue = valueRange[i][0];
+
+    // Check if the current cell matches the target category
+    if (String(cellValue).trim() === targetCategory.trim()) {
+      var existingStock = stockRange[i][0] || 0; 
+      var updatedStock = existingStock - newStock; 
+      stockWriteRange.getCell(i + 1, 1).setValue(updatedStock); 
+      return ContentService.createTextOutput(JSON.stringify({
+        status: "success",
+        message: "Stock updated successfully for target " + targetCategory + "!"
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+  }
+  return ContentService.createTextOutput(JSON.stringify({
+    status: "error",
+    message: "Target not found."
+  })).setMimeType(ContentService.MimeType.JSON);
+}

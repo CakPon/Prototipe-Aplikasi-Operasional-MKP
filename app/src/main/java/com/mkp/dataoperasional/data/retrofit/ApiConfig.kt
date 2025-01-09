@@ -20,7 +20,7 @@ class ApiConfig {
                 .addInterceptor(authInterceptor)
                 .build()
             val retrofit = Retrofit.Builder()
-                .baseUrl("https://script.google.com/macros/s/AKfycbxYrfpmq9A52Az431CDPYjoswjmBX7RGwVuTsxw-0q7iaKbZWuAJLX8wzYh_erh_hcaDQ/")
+                .baseUrl("YOUR API URL")
                 .addConverterFactory(GsonConverterFactory.create(GsonBuilder().setLenient().create()))
                 .client(client)
                 .build()
